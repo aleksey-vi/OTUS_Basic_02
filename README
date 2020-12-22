@@ -1,0 +1,146 @@
+#проверка какие фацлы есть в системе
+rpm -qa | grep httpd
+
+#проверка статуса запущен ли апач ( необходимо sudo или su)
+sustemstl status httpd
+
+#проверка свободных портов, что на каких портах работает у нас в системе
+ss -tnlp
+
+#ОСНОВНОЙ конфиг файл apache
+/etc/httpd/conf/httpd.conf
+
+#чистим конфиг файл от лишних строк
+grep -vP "\#|^$" /etc/httpd/conf/httpd.conf - выводим все строки из конфиг файла, в которых нет символа решетка и пустых строки
+grep -vP "\#|^$" /etc/httpd/conf/httpd.conf | wc -l  -тоже самое только с подсчетом строк
+
+#копируем оригинальный конфиг
+cp /etc/httpd/conf/httpd.conf /etc/httpd/conf/httpd.conf-new
+
+#чистим от лишнего основной конфиг файла
+sudo grep -vP "\#|^$" /etc/httpd/conf/httpd.conf-new >/etc/httpd/conf/httpd.conf
+
+#подготовка к установке и сама установка nginx
+yum install epel-release
+yum install nginx
+
+#конфиг файл нджинкс
+/etc/nginx/nginx.conf
+
+#если что-то не работает то логи смотрим командой:
+tail /var/log/nginx/error.log
+
+#смотрим все файлы нджинкса
+ls -l /etc/nginx
+
+#все веб страницы nginx
+ls -l /usr/share/nginx/html
+index.html -страница в интернете в виде html
+
+#поиск пакеты диг, лежит в bind-utils
+yum provides */dig
+dig A yandex.ru - смотрим А адреса у яндекса, у яндекса 4 ip адреса
+
+#тут размещаем веб страницы, 3 разных
+/var/www/
+
+#для начала создаем 3 директории под 3 разных страницы
+mkdir /var/www/8080
+mkdir /var/www/8081
+mkdir /var/www/8082
+
+#ищем стартовую страницу
+nano /etc/httpd/conf.d/welcome.conf - вспоминаем где стартовая страница, инфу ищем в этом описании apache
+ls - l /usr/share/httpd/noindex - вот ее адрес
+nano /usr/share/httpd/noindex/index.html - сама страница
+
+#копируем в свои каталоги 80 81 и 82 ( стартовая страница апач)
+cp /usr/share/httpd/noindex/index.html /var/www/8080
+cp /usr/share/httpd/noindex/index.html /var/www/8081
+cp /usr/share/httpd/noindex/index.html /var/www/8082
+
+#!!!(каталог в котором указывается что отоображается на странице)
+nano /var/www/8080/index.html  - меняем странички Testing 123.. - строку изменить на например 8080 8081 8082
+nano /var/www/8081/index.html
+nano /var/www/8082/index.html
+
+
+#делаем заготовку
+nano /opt/8080.conf
+
+#сам файл
+<VirtualHost *:8080> - звездочка говорит о том что не важно как будет хост называться главное на каком порту
+
+        ServerAdmin webmaster@localhost --- заготовка в конфиге, потом меняем  8080 на 81 и 82 соответственно
+        DocumentRoot /var/www/8080
+
+</VirtualHost>
+
+#копируем саму заготовку
+cp /opt/8080.conf /etc/httpd/conf.d/
+cp /opt/8080.conf /etc/httpd/conf.d/8081.conf
+cp /opt/8080.conf /etc/httpd/conf.d/8082.conf
+
+#редактируем наши заготовки для каждого порта
+nano /etc/httpd/conf.d/8080.conf (уже готовая)
+nano /etc/httpd/conf.d/8081.conf
+nano /etc/httpd/conf.d/8082.conf
+
+#Заставим апач работать на 3х разных портах, для этого откроем основной конфиг файла
+nano /etc/httpd/conf/httpd.conf
+
+#дописываем
+listen 8080
+listen 8081
+listen 8082
+
+#проверка синтаксиса конфиг файлов
+httpd -t - проверка синтаксиса (Warning не страшно)
+
+#проверим фильтрацию
+curl localhost:8080 | grep 8080
+curl localhost:8081 | grep 8081
+curl localhost:8082 | grep 8082
+
+#заходим в основной файл
+nano /etc/nginx/nginx.conf
+
+#ищем строки начинающиеся с include
+#нам нужна строка с директорией "include /etc/nginx/conf.d/*.conf"
+
+#создаем называем файл upstream
+nano /etc/nginx/conf.d/upstream.conf
+
+#Важная директива upstream, которую мы описываем
+upstream httpd(имя может быть любое) {
+    server 192.168.10.10:8080;(могут быть реальные доменные имена)
+    server 192.168.10.10:8081;
+    server 192.168.10.10:8082;
+}
+
+#узнать свой ip
+ip a
+
+#проверка ситаксиса конфиг файлов (вывод информативный)
+nginx -t
+
+#описание что все входящие потоки должны быть перенаправлены
+nano /etc/nginx/nginx.conf
+
+server {
+  listen 80  #по умолчанию слушается 80 порт
+  server_name _; любой сервер нейм
+  root      /etc/share/nginx/html; каталог по умолчанию где дефолтный индекс хтмл
+}
+
+location / {
+        proxy_pass http://httpd; имя потока который мы описали ранее
+}
+
+
+#рестарт nginx
+systemctl reaload nginx
+
+#работе 80 порта будет мешать firewall, для этого его остановим и отключим
+systemctl stop firewalld
+systemctl disable firewalld
