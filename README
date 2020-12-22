@@ -1,3 +1,5 @@
+### Настроить веб-сервер с балансировкой. FrontEnd — nginx, BackEnd — apache
+
 #проверка какие фацлы есть в системе
 rpm -qa | grep httpd
 
